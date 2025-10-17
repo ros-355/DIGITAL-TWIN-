@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>33/11 kV Substation Digital Twin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            background: #4caf50;
+            border-radius: 20px;
+            font-size: 0.9em;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .stats-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .equipment-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .equipment-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .equipment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .equipment-name {
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+
+        .equipment-status {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-ok { background: #4caf50; }
+        .status-warning { background: #ff9800; }
+        .status-critical { background: #f44336; }
+
+        .param-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .param-label {
+            opacity: 0.8;
+        }
+
+        .param-value {
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .alarms-container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .alarm-item {
+            background: rgba(244, 67, 54, 0.2);
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #f44336;
+        }
+
+        .alarm-item.warning {
+            background: rgba(255, 152, 0, 0.2);
+            border-left-color: #ff9800;
+        }
+
+        .alarm-time {
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: rgba(244, 67, 54, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #f44336;
+            text-align: center;
+        }
+
+        h2 {
+            margin: 30px 0 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚡ 33/11 kV Substation Digital Twin</h1>
+        <p>Real-time monitoring and control system</p>
+        <span class="status-badge" id="connectionStatus">● Connected</span>
+    </div>
+
+    <div id="dashboardContent" class="loading">
+        Loading dashboard data...
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let isConnected = false;
+
+        async function fetchDashboardData() {
+            try {
+                const response = await fetch(API_URL + '/api/dashboard');
+                
+                if (!response.ok) {
+                    throw new Error('HTTP error! status: ' + response.status);
+                }
+                
+                const data = await response.json();
+                isConnected = true;
+                updateConnectionStatus(true);
+                renderDashboard(data);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                isConnected = false;
+                updateConnectionStatus(false);
+                showError();
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusElement = document.getElementById('connectionStatus');
+            if (connected) {
+                statusElement.textContent = '● Connected';
+                statusElement.style.background = '#4caf50';
+            } else {
+                statusElement.textContent = '● Disconnected';
+                statusElement.style.background = '#f44336';
+            }
+        }
+
+        function showError() {
+            document.getElementById('dashboardContent').innerHTML = 
+                '<div class="error">' +
+                    '<h2>⚠️ Cannot Connect to API</h2>' +
+                    '<p>Please make sure the API server is running on ' + API_URL + '</p>' +
+                    '<p style="margin-top: 10px; opacity: 0.8;">Run: python main.py</p>' +
+                '</div>';
+        }
+
+        function getEquipmentStatus(equipment, type) {
+            if (type === 'transformer') {
+                if (equipment.winding_temperature > 80 || equipment.oil_temperature > 75) {
+                    return { class: 'status-critical', text: 'CRITICAL' };
+                }
+                if (equipment.load_percentage > 90 || equipment.oil_temperature > 70) {
+                    return { class: 'status-warning', text: 'WARNING' };
+                }
+            }
+            return { class: 'status-ok', text: 'NORMAL' };
+        }
+
+        function renderDashboard(data) {
+            const stats = data.statistics;
+            
+            let html = '<div class="stats-container">' +
+                '<div class="stat-card">' +
+                    '<div class="stat-value">' + stats.total_transformers + '</div>' +
+                    '<div class="stat-label">Transformers</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-value">' + stats.total_breakers + '</div>' +
+                    '<div class="stat-label">Circuit Breakers</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-value">' + stats.total_busbars + '</div>' +
+                    '<div class="stat-label">Busbars</div>' +
+                '</div>' +
+                '<div class="stat-card">' +
+                    '<div class="stat-value">' + stats.active_alarms + '</div>' +
+                    '<div class="stat-label">Active Alarms</div>' +
+                '</div>' +
+            '</div>' +
+            '<h2>🔌 Transformers</h2>' +
+            '<div class="equipment-container">';
+
+            // Transformers
+            data.transformers.forEach(function(t) {
+                const status = getEquipmentStatus(t, 'transformer');
+                html += '<div class="equipment-card">' +
+                    '<div class="equipment-header">' +
+                        '<span class="equipment-name">' + t.transformer_id + '</span>' +
+                        '<span class="equipment-status ' + status.class + '">' + status.text + '</span>' +
+                    '</div>' +
+                    '<div class="param-row">' +
+                        '<span class="param-label">Primary Voltage:</span>' +
+                        '<span class="param-value">' + t.primary_voltage + ' kV</span>' +
+                    '</div>' +
+                    '<div class="param-row">' +
+                        '<span class="param-label">Secondary Voltage:</span>' +
+                        '<span class="param-value">' + t.secondary_voltage + ' kV</span>' +
+                    '</div>' +
+                    '<div class="param-row">' +
+                        '<span class="param-label">Primary Current:</span>' +
+                        '<span class="param-value">' + t.primary_current + ' A</span>' +
+                    '</div>' +
+                    '<div class="param-row">' +
+                        '<span class="param-label">Oil Temperature:</span>' +
+                        '<span class="param-value">' + t.oil_temperature + ' °C</span>' +
+                    '</div>' +
+                    '<div class="param-row">' +
+                        '<span class="param-label">Winding Temperature:</span>' +
+                        '<span class="param-value">' + t.winding_temperature + ' °C</span>' +
+                    '</div>' +
+                    '<div class="param-row">' +
+                        '<span class="param-label">Load:</span>' +
+                        '<span class="param-value">' + t.load_percentage + ' %</span>' +
+                    '</div>' +
+                    '<div class="param-row">' +
+                        '<span class="param-label">Power Factor:</span>' +
+                        '<span class="param-value">' + t.power_factor + '</span>' +
+                    '</div>' +
+                '</div>';
+            });
+
+            html += '</div>';
+
+            // Circuit Breakers
+            if (data.circuit_breakers.length > 0) {
+                html += '<h2>⚡ Circuit Breakers</h2><div class="equipment-container">';
+                
+                data.circuit_breakers.forEach(function(cb) {
+                    const statusClass = cb.status === 'closed' ? 'status-ok' : 'status-warning';
+                    html += '<div class="equipment-card">' +
+                        '<div class="equipment-header">' +
+                            '<span class="equipment-name">' + cb.breaker_id + '</span>' +
+                            '<span class="equipment-status ' + statusClass + '">' + cb.status.toUpperCase() + '</span>' +
+                        '</div>' +
+                        '<div class="param-row">' +
+                            '<span class="param-label">Voltage:</span>' +
+                            '<span class="param-value">' + cb.voltage + ' kV</span>' +
+                        '</div>' +
+                        '<div class="param-row">' +
+                            '<span class="param-label">Current:</span>' +
+                            '<span class="param-value">' + cb.current + ' A</span>' +
+                        '</div>' +
+                        '<div class="param-row">' +
+                            '<span class="param-label">Operations:</span>' +
+                            '<span class="param-value">' + cb.operation_count + '</span>' +
+                        '</div>' +
+                    '</div>';
+                });
+                
+                html += '</div>';
+            }
+
+            // Busbars
+            if (data.busbars.length > 0) {
+                html += '<h2>📊 Busbars</h2><div class="equipment-container">';
+                
+                data.busbars.forEach(function(bb) {
+                    html += '<div class="equipment-card">' +
+                        '<div class="equipment-header">' +
+                            '<span class="equipment-name">' + bb.busbar_id + '</span>' +
+                            '<span class="equipment-status status-ok">ENERGIZED</span>' +
+                        '</div>' +
+                        '<div class="param-row">' +
+                            '<span class="param-label">Voltage:</span>' +
+                            '<span class="param-value">' + bb.voltage + ' kV</span>' +
+                        '</div>' +
+                        '<div class="param-row">' +
+                            '<span class="param-label">Frequency:</span>' +
+                            '<span class="param-value">' + bb.frequency + ' Hz</span>' +
+                        '</div>' +
+                        '<div class="param-row">' +
+                            '<span class="param-label">Active Power:</span>' +
+                            '<span class="param-value">' + bb.active_power + ' MW</span>' +
+                        '</div>' +
+                        '<div class="param-row">' +
+                            '<span class="param-label">Reactive Power:</span>' +
+                            '<span class="param-value">' + bb.reactive_power + ' MVAr</span>' +
+                        '</div>' +
+                    '</div>';
+                });
+                
+                html += '</div>';
+            }
+
+            // Alarms
+            if (data.alarms.length > 0) {
+                html += '<h2>🚨 Active Alarms</h2><div class="alarms-container">';
+                
+                const recentAlarms = data.alarms.slice(-5).reverse();
+                recentAlarms.forEach(function(alarm) {
+                    const alarmClass = alarm.severity === 'critical' ? '' : 'warning';
+                    const alarmTime = new Date(alarm.timestamp).toLocaleString();
+                    html += '<div class="alarm-item ' + alarmClass + '">' +
+                        '<strong>' + alarm.severity.toUpperCase() + '</strong> - ' + alarm.equipment_id + '<br>' +
+                        alarm.message + '<br>' +
+                        '<span class="alarm-time">' + alarmTime + '</span>' +
+                    '</div>';
+                });
+                
+                html += '</div>';
+            }
+
+            document.getElementById('dashboardContent').innerHTML = html;
+        }
+
+        // Initial load
+        fetchDashboardData();
+
+        // Auto-refresh every 3 seconds
+        setInterval(fetchDashboardData, 3000);
+    </script>
+</body>
+</html>
